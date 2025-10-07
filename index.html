@@ -149,10 +149,10 @@
         const hashMarkWidth = 30;
 
         // Positions
-        const qbX = fieldWidth / 2;
-        const qbY = fieldHeight - (5 * yardPixels); // QB at 5 yards from bottom
-        const wrX = fieldWidth / 2;
-        const wrY = qbY - (2 * yardPixels); // WR starts 2 yards ahead of QB
+    const qbX = fieldWidth / 2;
+    const qbY = fieldHeight - (5 * yardPixels); // QB at 5 yards from bottom
+    const wrX = qbX - 80; // WR is 80px to the left of QB
+    const wrY = qbY - (2 * yardPixels); // WR starts 2 yards ahead of QB
 
         let isAnimating = false;
         let hasRun = false;
