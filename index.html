@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Football Route Visualizer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            padding: 30px;
+            max-width: 900px;
+            width: 100%;
+        }
+
+        h1 {
+            text-align: center;
+            color: #1e3c72;
+            margin-bottom: 25px;
+            font-size: 2em;
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+        }
+
+        select, button {
+            padding: 12px 20px;
+            font-size: 16px;
+            border: 2px solid #1e3c72;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        select {
+            flex: 1;
+            min-width: 200px;
+            background: white;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: #2a5298;
+            box-shadow: 0 0 8px rgba(42, 82, 152, 0.3);
+        }
+
+        button {
+            background: #1e3c72;
+            color: white;
+            font-weight: bold;
+            min-width: 120px;
+        }
+
+        button:hover {
+            background: #2a5298;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: #cccccc;
+            border-color: #999999;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        #fieldCanvas {
+            display: block;
+            width: 100%;
+            border: 3px solid #1e3c72;
+            border-radius: 10px;
+            background: #2d5016;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .info {
+            margin-top: 15px;
+            text-align: center;
+            color: #555;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏈 Football Route Visualizer</h1>
+        
+        <div class="controls">
+            <select id="routeSelect">
+                <option value="">-- Select a Route --</option>
+                <option value="flat">1 - Flat</option>
+                <option value="slant">2 - Slant</option>
+                <option value="comeback">3 - Comeback</option>
+                <option value="curl">4 - Curl</option>
+                <option value="out">5 - Out</option>
+                <option value="dig">6 - Dig/In</option>
+                <option value="corner">7 - Corner</option>
+                <option value="post">8 - Post</option>
+                <option value="go">9 - Go/Fade</option>
+            </select>
+            
+            <button id="runButton" disabled>Run</button>
+        </div>
+
+        <canvas id="fieldCanvas" width="800" height="600"></canvas>
+
+        <div class="info">
+            Select a route and click "Run" to visualize the play
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('fieldCanvas');
+        const ctx = canvas.getContext('2d');
+        const routeSelect = document.getElementById('routeSelect');
+        const runButton = document.getElementById('runButton');
+
+        // Field dimensions
+        const fieldWidth = canvas.width;
+        const fieldHeight = canvas.height;
+        const yardPixels = fieldHeight / 55; // 50 yards field + 5 yards buffer on each end
+        const hashMarkWidth = 30;
+
+        // Positions
+        const qbX = fieldWidth / 2;
+        const qbY = fieldHeight - (5 * yardPixels); // QB at 5 yards from bottom
+        const wrX = fieldWidth / 2;
+        const wrY = qbY - (2 * yardPixels); // WR starts 2 yards ahead of QB
+
+        let isAnimating = false;
+        let hasRun = false;
+
+        // Route definitions (relative to WR starting position)
+        const routes = {
+            flat: {
+                name: "Flat",
+                points: [
+                    { x: 0, y: 0 },
+                    { x: 0, y: -3 * yardPixels },
+                    { x: -80, y: -3 * yardPixels }
+                ]
+            },
+            slant: {
+                name: "Slant",
+                points: [
+                    { x: 0, y: 0 },
+                    { x: 0, y: -3 * yardPixels },
+                    { x: -60, y: -10 * yardPixels }
+                ]
+            },
+            comeback: {
+                name: "Comeback",
+                points: [
+                    { x: 0, y: 0 },
+                    { x: 0, y: -12 * yardPixels },
+                    { x: 0, y: -9 * yardPixels }
+                ]
+            },
+            curl: {
+                name: "Curl",
+                points: [
+                    { x: 0, y: 0 },
+                    { x: 0, y: -8 * yardPixels },
+                    { x: -25, y: -7 * yardPixels }
+                ]
+            },
+            out: {
+                name: "Out",
+                points: [
+                    { x: 0, y: 0 },
+                    { x: 0, y: -10 * yardPixels },
+                    { x: -80, y: -10 * yardPixels }
+                ]
+            },
+            dig: {
+                name: "Dig/In",
+                points: [
+                    { x: 0, y: 0 },
+                    { x: 0, y: -10 * yardPixels },
+                    { x: 80, y: -10 * yardPixels }
+                ]
+            },
+            corner: {
+                name: "Corner",
+                points: [
+                    { x: 0, y: 0 },
+                    { x: 0, y: -12 * yardPixels },
+                    { x: -70, y: -20 * yardPixels }
+                ]
+            },
+            post: {
+                name: "Post",
+                points: [
+                    { x: 0, y: 0 },
+                    { x: 0, y: -12 * yardPixels },
+                    { x: 70, y: -20 * yardPixels }
+                ]
+            },
+            go: {
+                name: "Go/Fade",
+                points: [
+                    { x: 0, y: 0 },
+                    { x: -15, y: -25 * yardPixels }
+                ]
+            }
+        };
+
+        // Draw the football field
+        function drawField() {
+            // Field background
+            ctx.fillStyle = '#2d5016';
+            ctx.fillRect(0, 0, fieldWidth, fieldHeight);
+
+            // Field border
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(20, 20, fieldWidth - 40, fieldHeight - 40);
+
+            // Yard lines (every 5 yards)
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([]);
+
+            for (let yard = 0; yard <= 50; yard += 5) {
+                const y = fieldHeight - 20 - (yard * yardPixels);
+                
+                ctx.beginPath();
+                ctx.moveTo(20, y);
+                ctx.lineTo(fieldWidth - 20, y);
+                ctx.stroke();
+
+                // Yard numbers
+                if (yard > 0 && yard < 50) {
+                    ctx.fillStyle = 'white';
+                    ctx.font = 'bold 20px Arial';
+                    ctx.textAlign = 'center';
+                    const yardNum = yard <= 50 ? yard : 100 - yard;
+                    ctx.fillText(yardNum.toString(), 60, y + 7);
+                    ctx.fillText(yardNum.toString(), fieldWidth - 60, y + 7);
+                }
+            }
+
+            // Hash marks
+            ctx.lineWidth = 1;
+            for (let yard = 1; yard < 50; yard++) {
+                const y = fieldHeight - 20 - (yard * yardPixels);
+                
+                // Left hash marks
+                ctx.beginPath();
+                ctx.moveTo(fieldWidth / 2 - 60, y);
+                ctx.lineTo(fieldWidth / 2 - 60 + hashMarkWidth, y);
+                ctx.stroke();
+
+                // Right hash marks
+                ctx.beginPath();
+                ctx.moveTo(fieldWidth / 2 + 60 - hashMarkWidth, y);
+                ctx.lineTo(fieldWidth / 2 + 60, y);
+                ctx.stroke();
+            }
+        }
+
+        // Draw QB
+        function drawQB() {
+            ctx.fillStyle = '#FF0000';
+            ctx.beginPath();
+            ctx.arc(qbX, qbY, 8, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('QB', qbX, qbY + 20);
+        }
+
+        // Draw WR
+        function drawWR(x, y) {
+            ctx.fillStyle = '#0000FF';
+            ctx.beginPath();
+            ctx.arc(x, y, 8, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = 'white';
+            ctx.font = 'bold 10px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('WR', x, y - 12);
+        }
+
+        // Draw route path
+        function drawRoute(routeKey, progress = 1) {
+            const route = routes[routeKey];
+            if (!route) return;
+
+            const points = route.points.map(p => ({
+                x: wrX + p.x,
+                y: wrY + p.y
+            }));
+
+            // Calculate total path length
+            let totalLength = 0;
+            const segments = [];
+            for (let i = 1; i < points.length; i++) {
+                const dx = points[i].x - points[i-1].x;
+                const dy = points[i].y - points[i-1].y;
+                const length = Math.sqrt(dx * dx + dy * dy);
+                segments.push({ start: points[i-1], end: points[i], length });
+                totalLength += length;
+            }
+
+            // Draw route up to progress point
+            const targetLength = totalLength * progress;
+            let currentLength = 0;
+            let wrFinalX = wrX;
+            let wrFinalY = wrY;
+
+            ctx.strokeStyle = '#FFFF00';
+            ctx.lineWidth = 4;
+            ctx.setLineDash([]);
+            ctx.beginPath();
+            ctx.moveTo(wrX, wrY);
+
+            for (const segment of segments) {
+                if (currentLength + segment.length <= targetLength) {
+                    ctx.lineTo(segment.end.x, segment.end.y);
+                    wrFinalX = segment.end.x;
+                    wrFinalY = segment.end.y;
+                    currentLength += segment.length;
+                } else {
+                    const remaining = targetLength - currentLength;
+                    const ratio = remaining / segment.length;
+                    wrFinalX = segment.start.x + (segment.end.x - segment.start.x) * ratio;
+                    wrFinalY = segment.start.y + (segment.end.y - segment.start.y) * ratio;
+                    ctx.lineTo(wrFinalX, wrFinalY);
+                    break;
+                }
+            }
+            ctx.stroke();
+
+            // Draw WR at current position
+            drawWR(wrFinalX, wrFinalY);
+
+            // Draw throw line if route is complete
+            if (progress >= 1) {
+                ctx.strokeStyle = '#FF00FF';
+                ctx.lineWidth = 3;
+                ctx.setLineDash([10, 5]);
+                ctx.beginPath();
+                ctx.moveTo(qbX, qbY);
+                ctx.lineTo(wrFinalX, wrFinalY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+
+                // Draw ball
+                ctx.fillStyle = '#8B4513';
+                ctx.beginPath();
+                ctx.arc(wrFinalX, wrFinalY, 6, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Animate route
+        function animateRoute(routeKey) {
+            isAnimating = true;
+            runButton.disabled = true;
+            let progress = 0;
+            const duration = 2000; // 2 seconds
+            const startTime = Date.now();
+
+            function animate() {
+                const elapsed = Date.now() - startTime;
+                progress = Math.min(elapsed / duration, 1);
+
+                drawField();
+                drawQB();
+                drawRoute(routeKey, progress);
+
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    isAnimating = false;
+                    hasRun = true;
+                    runButton.textContent = 'Replay';
+                    runButton.disabled = false;
+                }
+            }
+
+            animate();
+        }
+
+        // Initialize
+        drawField();
+        drawQB();
+        drawWR(wrX, wrY);
+
+        // Event listeners
+        routeSelect.addEventListener('change', (e) => {
+            if (e.target.value) {
+                runButton.disabled = false;
+                hasRun = false;
+                runButton.textContent = 'Run';
+                
+                // Redraw field with WR at starting position
+                drawField();
+                drawQB();
+                drawWR(wrX, wrY);
+            } else {
+                runButton.disabled = true;
+            }
+        });
+
+        runButton.addEventListener('click', () => {
+            const selectedRoute = routeSelect.value;
+            if (selectedRoute && !isAnimating) {
+                animateRoute(selectedRoute);
+            }
+        });
+    </script>
+</body>
+</html>
